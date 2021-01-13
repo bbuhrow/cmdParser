@@ -1,14 +1,54 @@
+/*
+MIT License
+
+Copyright (c) 2021 Ben Buhrow
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+// ============================================================================
+// a simple command line parser.
+// supports defining required and options arguments to a program.
+// supports defining command line switches with optional arguments.
+//
+// gcc -O2 cmdOptions.h cmdOptions.c demo.c -o demo
+//
+// example:
+// ./demo "hello" -v -v --str "world"
+// ============================================================================
+
 #include "cmdOptions.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// this function prints the help information specified by usageHelp
+// and OptionHelp.
+void printUsage(options_t* options);
 
 // ========================================================================
 // In this section, define the options, any long form aliases for them,
 // whether they have an argument or not, and help strings to display
 // if the user tries -h
 
-
+// define help text for usage of the program.  
+char usageHelp[MAXHELPLEN] = "msg_to_print [options]";
 
 // command line options, specified by '-'
 char OptionArray[NUMOPTIONS][MAXOPTIONLEN] = { 
@@ -39,6 +79,18 @@ char OptionHelp[NUMOPTIONS][MAXHELPLEN] = {
 // ========================================================================
 
 
+// ========================================================================
+// modify this function to handle input arguments
+// ========================================================================
+void applyArg(char* arg, int argNum, options_t* options)
+{
+    if (argNum == 0)
+    {
+        strcpy(options->inputArg, arg);
+    }
+
+    return;
+}
 
 // ========================================================================
 // modify this function to handle each option case, assigning values
@@ -103,15 +155,25 @@ options_t* initOpt(void)
         options->needsArg[i] = needsArg[i];
     }
 
+    // ========================================================================
+    // define how many required and optional arguments there are
+    options->numArguments = 1;
+    options->numRequired = 1;
+    // ========================================================================
+
 
     // ========================================================================
-    // default values assigned here:
+    // default values assigned to optional arguments here
 
+    // ========================================================================
+
+
+    // ========================================================================
+    // default values assigned to switches here:
     options->optionNoarg = 0;
     strcpy(options->optionStr, "This is the default option string");
     options->optionInt = 42;
     options->optionDbl = 299792458.0;
-
     // ========================================================================
 
     return options;
@@ -132,6 +194,7 @@ int processOpts(int argc, char** argv, options_t* options)
     int i, j, k = 0, valid, longswitch = 0;
     char optbuf[MAXOPTIONLEN];
     char argbuf[MAXARGLEN];
+    int numOpt = 0;
 
     //argument loop
     i = 1;
@@ -140,14 +203,44 @@ int processOpts(int argc, char** argv, options_t* options)
         longswitch = 0;
 
         // read in the option
-        if (argv[i][0] != '-')
-        {
-            printf("no switch detected\n");
-            exit(24);
-        }
-        if ((strlen(argv[i]) > 1) && (argv[i][1] == '-'))
+        if ((strlen(argv[i]) > 1) && (argv[i][0] == '-') && (argv[i][1] == '-'))
         {
             longswitch = 1;
+        }
+        else if (argv[i][0] == '-')
+        {
+            longswitch = 0;
+        }
+        else
+        {
+            if (numOpt >= (options->numArguments))
+            {
+                printf("Too many inputs\n\n");
+                printUsage(options);
+                exit(0);
+            }
+            else
+            {
+                // process argument
+                applyArg(argv[i], numOpt, options);
+                numOpt++;
+                i++;
+                continue;
+            }
+        }
+
+        if (numOpt < options->numRequired)
+        {
+            if (options->numRequired == 1)
+            {
+                printf("Missing %d required argument \n\n", options->numRequired);
+            }
+            else
+            {
+                printf("Missing %d required arguments \n\n", options->numRequired);
+            }
+            printUsage(options);
+            exit(0);
         }
 
         // check if the options is valid
@@ -179,37 +272,8 @@ int processOpts(int argc, char** argv, options_t* options)
 
         if (valid == 0)
         {
-            printf("supported options are: \n");
-            for (j = 0; j < NUMOPTIONS; j++)
-            {
-                if (strlen(options->LongOptionAliases[j]) > 0)
-                {
-                    if (options->needsArg[j])
-                    {
-                        printf("%s <value>: %s (alias --%s)\n", 
-                            options->OptionArray[j], options->OptionHelp[j],
-                            options->LongOptionAliases[j]);
-                    }
-                    else
-                    {
-                        printf("%s        : %s (alias --%s)\n", 
-                            options->OptionArray[j], options->OptionHelp[j],
-                            options->LongOptionAliases[j]);
-                    }
-                }
-                else
-                {
-                    if (options->needsArg[j])
-                    {
-                        printf("%s <value>: %s\n", options->OptionArray[j], options->OptionHelp[j]);
-                    }
-                    else
-                    {
-                        printf("%s        : %s\n", options->OptionArray[j], options->OptionHelp[j]);
-                    }
-                }
-            }
-            exit(21);
+            printUsage(options);
+            exit(0);
         }
 
         //check to see if this option requires an argument
@@ -218,8 +282,9 @@ int processOpts(int argc, char** argv, options_t* options)
             i++;
             if ((i == argc) || argv[i][0] == '-')
             {
-                printf("argument expected for %s%s\n", longswitch ? "--" : "-", optbuf);
-                exit(22);
+                printf("argument expected for %s%s\n\n", longswitch ? "--" : "-", optbuf);
+                printUsage(options);
+                exit(0);
             }
             strncpy(argbuf, argv[i], MAXARGLEN);
 
@@ -257,6 +322,60 @@ int processOpts(int argc, char** argv, options_t* options)
         i++;
     }
 
+    if (numOpt < options->numRequired)
+    {
+        if (options->numRequired == 1)
+        {
+            printf("Missing %d required argument \n\n", options->numRequired);
+        }
+        else
+        {
+            printf("Missing %d required arguments \n\n", options->numRequired);
+        }
+        printUsage(options);
+        exit(0);
+    }
+
     return k;
 }
 
+// ========================================================================
+// this function should not need to be changed:
+// edit OptionHelp and usageHelp strings.
+// ========================================================================
+void printUsage(options_t* options)
+{
+    int j;
+    printf("Usage: %s\n", usageHelp);
+    printf("supported options are: \n");
+    for (j = 0; j < NUMOPTIONS; j++)
+    {
+        if (strlen(options->LongOptionAliases[j]) > 0)
+        {
+            if (options->needsArg[j])
+            {
+                printf("%s <value>: %s (alias --%s)\n",
+                    options->OptionArray[j], options->OptionHelp[j],
+                    options->LongOptionAliases[j]);
+            }
+            else
+            {
+                printf("%s        : %s (alias --%s)\n",
+                    options->OptionArray[j], options->OptionHelp[j],
+                    options->LongOptionAliases[j]);
+            }
+        }
+        else
+        {
+            if (options->needsArg[j])
+            {
+                printf("%s <value>: %s\n", options->OptionArray[j], options->OptionHelp[j]);
+            }
+            else
+            {
+                printf("%s        : %s\n", options->OptionArray[j], options->OptionHelp[j]);
+            }
+        }
+    }
+    return;
+}
