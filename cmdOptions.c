@@ -350,18 +350,27 @@ void printUsage(options_t* options)
     printf("supported options are: \n");
     for (j = 0; j < NUMOPTIONS; j++)
     {
+        int n;
         if (strlen(options->LongOptionAliases[j]) > 0)
         {
             if (options->needsArg[j])
             {
-                printf("%s <value>: %s (alias --%s)\n",
-                    options->OptionArray[j], options->OptionHelp[j],
+                n = printf("%s <value>",
+                    options->OptionArray[j]);
+                for (; n < MAXOPTIONLEN + 8; n++)
+                    printf(" ");
+                printf(": %s (alias --%s)\n",
+                    options->OptionHelp[j],
                     options->LongOptionAliases[j]);
             }
             else
             {
-                printf("%s        : %s (alias --%s)\n",
-                    options->OptionArray[j], options->OptionHelp[j],
+                n = printf("%s        ",
+                    options->OptionArray[j]);
+                for (; n < MAXOPTIONLEN + 8; n++)
+                    printf(" ");
+                printf(": %s (alias --%s)\n",
+                    options->OptionHelp[j],
                     options->LongOptionAliases[j]);
             }
         }
@@ -369,13 +378,93 @@ void printUsage(options_t* options)
         {
             if (options->needsArg[j])
             {
-                printf("%s <value>: %s\n", options->OptionArray[j], options->OptionHelp[j]);
+                n = printf("%s <value>",
+                    options->OptionArray[j]);
+                for (; n < MAXOPTIONLEN + 8; n++)
+                    printf(" ");
+                printf(": %s\n", options->OptionHelp[j]);
             }
             else
             {
-                printf("%s        : %s\n", options->OptionArray[j], options->OptionHelp[j]);
+                n = printf("%s        ",
+                    options->OptionArray[j]);
+                for (; n < MAXOPTIONLEN + 8; n++)
+                    printf(" ");
+                printf(": %s\n", options->OptionHelp[j]);
             }
         }
     }
+    return;
+}
+
+// ========================================================================
+// this function should not need to be changed:
+// parse options from a .ini (or other) file in a option=value syntax
+// ========================================================================
+void readINI(const char* filename, options_t* options)
+{
+    FILE* doc;
+    char* str;
+    char* key;
+    char* value;
+    int len;
+
+    doc = fopen(filename, "r");
+
+    if (doc == NULL)
+    {
+        printf("warning: could not open %s, no options parsed\n", filename);
+        return;
+    }
+
+    str = (char*)malloc(1024 * sizeof(char));
+    while (fgets(str, 1024, doc) != NULL)
+    {
+        // if first character is a % sign, skip this line.
+        if (str[0] == '%')
+            continue;
+
+        // if first character is a blank, skip this line.
+        if (str[0] == ' ')
+            continue;
+
+        // if last character of line is newline, remove it
+        do
+        {
+            len = strlen(str);
+            if (str[len - 1] == 10)
+                str[len - 1] = '\0';
+            else if (str[len - 1] == 13)
+                str[len - 1] = '\0';
+            else
+                break;
+        } while (len > 0);
+
+        // if line is now blank, skip it.
+        if (strlen(str) == 0)
+            continue;
+
+        // read keyword by looking for an equal sign
+        key = strtok(str, "=");
+
+        if (key == NULL)
+        {
+            // no longer insist on having an argument
+            key = str;
+            value = NULL;
+        }
+        else
+        {
+            // read value
+            value = strtok((char*)0, "=");
+        }
+
+        // apply the option... same routine command line options use
+        applyOpt(key, value, options);
+    }
+
+    fclose(doc);
+    free(str);
+
     return;
 }
